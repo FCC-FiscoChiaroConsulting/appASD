@@ -44,7 +44,7 @@ COLONNE_PRIMA_NOTA = [
     "MetodoPagamento",
 ]
 
-# Listino rapido per modelli precompilati
+# Listino rapido
 LISTINO = [
     {
         "nome": "Quota associativa annuale",
@@ -102,7 +102,7 @@ def crea_pdf_ricevuta(associazione: dict, dati: dict) -> bytes:
     margin_top = height - 20 * mm
     y = margin_top
 
-    # Logo opzionale
+    # Logo
     logo_bytes = associazione.get("Logo")
     logo_width_mm = 30
     logo_height_mm = 30
@@ -160,7 +160,7 @@ def crea_pdf_ricevuta(associazione: dict, dati: dict) -> bytes:
         c.drawString(x_text, y, " - ".join(contatti))
         y -= 12
 
-    # Linea separazione
+    # Separatore
     y -= 4
     c.setLineWidth(0.7)
     c.line(margin_left, y, width - margin_left, y)
@@ -177,7 +177,7 @@ def crea_pdf_ricevuta(associazione: dict, dati: dict) -> bytes:
     c.drawRightString(width - margin_left, y, f'Data: {dati["Data"].strftime("%d/%m/%Y")}')
     y -= 20
 
-    # Corpo testo
+    # Corpo
     tipo_voce = dati.get("TipoVoce") or ""
     descrizione_tipo = f"{tipo_voce.lower()} " if tipo_voce and tipo_voce != "Altro" else ""
 
@@ -218,7 +218,7 @@ def crea_pdf_ricevuta(associazione: dict, dati: dict) -> bytes:
             y -= 12
         c.drawText(textobj)
 
-    # Firma (senza nome)
+    # Firma
     y_firma = 40 * mm
     c.setLineWidth(0.6)
     c.line(width - 80 * mm, y_firma, width - 20 * mm, y_firma)
@@ -238,17 +238,14 @@ def pdf_to_base64(pdf_bytes: bytes) -> str:
 
 
 def mostra_preview_pdf(pdf_bytes: bytes):
-    """
-    Mostra anteprima PDF. Se il browser non supporta l’embed,
-    almeno compare un messaggio di fallback.
-    """
+    """Anteprima PDF con fallback."""
     b64 = pdf_to_base64(pdf_bytes)
     html = f"""
     <object data="data:application/pdf;base64,{b64}" type="application/pdf" width="100%" height="600px">
         <embed src="data:application/pdf;base64,{b64}" type="application/pdf" />
         <p style="font-family: sans-serif;">
             Anteprima PDF non supportata dal browser.
-            Usa il pulsante di download qui sopra per aprire la ricevuta.
+            Usa il pulsante di download per visualizzare la ricevuta.
         </p>
     </object>
     """
@@ -264,12 +261,7 @@ def invia_email_con_pdf(
 ):
     """
     Invio email con allegato PDF.
-    Variabili ambiente richieste:
-    - SMTP_SERVER
-    - SMTP_PORT
-    - SMTP_USER
-    - SMTP_PASSWORD
-    - SENDER_EMAIL (facoltativo, default = SMTP_USER)
+    Richiede variabili ambiente SMTP_* e SENDER_EMAIL.
     """
     smtp_server = os.getenv("SMTP_SERVER")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
@@ -305,7 +297,6 @@ def invia_email_con_pdf(
 
 
 def df_to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Dati") -> bytes:
-    """Converte un DataFrame in bytes di un file Excel."""
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name=sheet_name)
@@ -319,6 +310,7 @@ def df_to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Dati") -> bytes:
 def pagina_ricevute():
     st.subheader("Ricevute generiche (attività istituzionale, non commerciale)")
 
+    # Stato iniziale
     if "ricevute_emesse" not in st.session_state:
         st.session_state.ricevute_emesse = pd.DataFrame(columns=COLONNE_RICEVUTE)
     if "prima_nota" not in st.session_state:
@@ -326,16 +318,14 @@ def pagina_ricevute():
     if "progressivo_ricevuta" not in st.session_state:
         st.session_state.progressivo_ricevuta = 1
 
-    # Se i dati arrivano da Drive potrebbero non avere la colonna PDF
+    # Colonna PDF garantita
     if "PDF" not in st.session_state.ricevute_emesse.columns:
         st.session_state.ricevute_emesse["PDF"] = None
 
     if not st.session_state.associazione.get("Denominazione"):
         st.warning("Compila prima l'anagrafica dell'associazione (menu a sinistra).")
 
-    # ==========================
-    # CONTROLLO SOCI
-    # ==========================
+    # ===== SOCI =====
     soci_df = st.session_state.get("soci", pd.DataFrame())
     if soci_df is None or soci_df.empty:
         st.error(
@@ -344,7 +334,6 @@ def pagina_ricevute():
         )
         return
 
-    # Usa solo i soci attivi se esiste la colonna 'Attivo'
     if "Attivo" in soci_df.columns:
         soci_df = soci_df[soci_df["Attivo"] == True]
 
@@ -355,7 +344,7 @@ def pagina_ricevute():
         )
         return
 
-    # Individua colonne CF e attività in base a come sono state chiamate
+    # Colonne CF / attività
     if "Codice fiscale" in soci_df.columns:
         cf_col = "Codice fiscale"
     elif "CF" in soci_df.columns:
@@ -363,14 +352,15 @@ def pagina_ricevute():
     else:
         cf_col = None
 
-    if "Attività principale" in soci_df.columns:
+    if "Attività principale (es. Calcio U10)" in soci_df.columns:
+        attivita_col = "Attività principale (es. Calcio U10)"
+    elif "Attività principale" in soci_df.columns:
         attivita_col = "Attività principale"
     else:
-        # prova a trovare una colonna che inizi con "Attività principale"
         cand = [c for c in soci_df.columns if c.startswith("Attività principale")]
         attivita_col = cand[0] if cand else None
 
-    # Prepariamo l'elenco dei soci per la select
+    # Etichette select soci
     opzioni = []
     righe = []
     for _, r in soci_df.iterrows():
@@ -385,15 +375,12 @@ def pagina_ricevute():
 
     tab_nuova, tab_elenco = st.tabs(["Nuova ricevuta", "Elenco ricevute"])
 
-    # ==========================
-    # TAB: NUOVA RICEVUTA
-    # ==========================
+    # ===== TAB NUOVA RICEVUTA =====
     with tab_nuova:
         numero_default = str(st.session_state.progressivo_ricevuta)
         numero = st.text_input("Numero ricevuta", numero_default)
         data_r = st.date_input("Data", value=date.today())
 
-        # --- SELEZIONE SOCIO OBBLIGATORIA ---
         st.markdown("### Seleziona socio per la ricevuta")
         idx_socio = st.selectbox(
             "Socio (se non presente, registralo nella pagina **Soci / Iscritti**)",
@@ -402,16 +389,21 @@ def pagina_ricevute():
         )
         socio_sel = righe[idx_socio]
 
-        intestatario_default = f"{str(socio_sel.get('Nome', '')).strip()} {str(socio_sel.get('Cognome', '')).strip()}".strip()
+        intestatario_default = (
+            f"{str(socio_sel.get('Nome', '')).strip()} "
+            f"{str(socio_sel.get('Cognome', '')).strip()}"
+        ).strip()
         cf_default = str(socio_sel.get(cf_col, "")).strip() if cf_col else ""
         centro_default = str(socio_sel.get(attivita_col, "")).strip() if attivita_col else ""
-        email_default = str(socio_sel.get("Email", "")).strip() if "Email" in socio_sel.index else ""
+        email_default = (
+            str(socio_sel.get("Email", "")).strip()
+            if "Email" in socio_sel.index
+            else ""
+        )
 
-        # Modello rapido
         nomi_listino = ["Nessun modello (compilo a mano)"] + [x["nome"] for x in LISTINO]
         modello_scelto = st.selectbox("Modello rapido (facoltativo)", nomi_listino)
 
-        # Tipologia importo
         tipo_voce = st.selectbox(
             "Tipologia importo",
             [
@@ -425,18 +417,13 @@ def pagina_ricevute():
 
         col_r1, col_r2 = st.columns(2)
         with col_r1:
-            # Nominativo e CF derivano SEMPRE dal socio selezionato
             st.text_input(
                 "Nominativo socio/genitore/donatore",
                 intestatario_default,
                 disabled=True,
             )
             if cf_default:
-                st.text_input(
-                    "Codice fiscale",
-                    cf_default,
-                    disabled=True,
-                )
+                st.text_input("Codice fiscale", cf_default, disabled=True)
             else:
                 st.text_input(
                     "Codice fiscale",
@@ -450,7 +437,7 @@ def pagina_ricevute():
                 centro_default,
             )
 
-            # Causale precompilata
+            # causale
             if modello_scelto != "Nessun modello (compilo a mano)":
                 modello = next(x for x in LISTINO if x["nome"] == modello_scelto)
                 causale_default = modello["causale"]
@@ -470,7 +457,6 @@ def pagina_ricevute():
             causale = st.text_input("Causale", causale_default)
 
         with col_r2:
-            # Importo precompilato da listino
             if modello_scelto != "Nessun modello (compilo a mano)":
                 modello = next(x for x in LISTINO if x["nome"] == modello_scelto)
                 importo_default = modello["importo"]
@@ -491,7 +477,6 @@ def pagina_ricevute():
             )
 
         note = st.text_area("Note (facoltative)", "")
-
         email_dest = st.text_input(
             "Email destinatario (per invio ricevuta, facoltativo)",
             email_default,
@@ -502,7 +487,9 @@ def pagina_ricevute():
             cf = cf_default
 
             if not intestatario or importo <= 0:
-                st.error("Verifica che il socio sia selezionato e l'importo sia maggiore di zero.")
+                st.error(
+                    "Verifica che il socio sia selezionato e che l'importo sia maggiore di zero."
+                )
             else:
                 dati = {
                     "Numero": numero,
@@ -519,7 +506,6 @@ def pagina_ricevute():
 
                 pdf_bytes = crea_pdf_ricevuta(st.session_state.associazione, dati)
 
-                # Aggiorna elenco ricevute
                 nuova_riga = {
                     "Numero": numero,
                     "Data": data_r.strftime("%d/%m/%Y"),
@@ -539,7 +525,6 @@ def pagina_ricevute():
                     ignore_index=True,
                 )
 
-                # Aggiorna prima nota (entrata)
                 nuova_riga_pn = {
                     "Data": data_r.strftime("%d/%m/%Y"),
                     "NumeroDocumento": numero,
@@ -559,26 +544,32 @@ def pagina_ricevute():
 
                 st.session_state.progressivo_ricevuta += 1
 
-                # Salvataggio automatico su Google Drive (solo dati, senza PDF)
+                # ===== SALVATAGGIO SU DRIVE (con messaggio) =====
                 try:
-                    salva_df_su_drive(
-                        st.session_state.ricevute_emesse.drop(columns=["PDF"]),
-                        "ricevute_asd_ssd.xlsx",
+                    df_ricevute_drive = st.session_state.ricevute_emesse.drop(
+                        columns=["PDF"]
                     )
+                    salva_df_su_drive(df_ricevute_drive, "ricevute_asd_ssd.xlsx")
                     salva_df_su_drive(
-                        st.session_state.prima_nota,
-                        "prima_nota_asd_ssd.xlsx",
+                        st.session_state.prima_nota, "prima_nota_asd_ssd.xlsx"
                     )
-                except Exception:
-                    pass
+                    st.info(
+                        "💾 Dati salvati su Google Drive "
+                        "(ricevute_asd_ssd.xlsx e prima_nota_asd_ssd.xlsx)."
+                    )
+                except Exception as e:
+                    st.error(
+                        "❌ Errore nel salvataggio su Google Drive "
+                        "(ricevute/prima nota)."
+                    )
+                    st.code(repr(e))
 
                 st.success("Ricevuta generata e prima nota aggiornata.")
 
-                # Anteprima PDF
+                # Anteprima + download
                 st.markdown("Anteprima PDF")
                 mostra_preview_pdf(pdf_bytes)
 
-                # Download PDF
                 st.download_button(
                     label="Scarica PDF ricevuta",
                     data=pdf_bytes,
@@ -586,27 +577,32 @@ def pagina_ricevute():
                     mime="application/pdf",
                 )
 
-                # Invio email
+                # Invio email opzionale
                 if email_dest:
                     invio = st.checkbox("Invia subito via email a questo indirizzo")
                     if invio:
-                        oggetto = f"Ricevuta n. {numero} - {st.session_state.associazione.get('Denominazione', '')}"
+                        oggetto = (
+                            f"Ricevuta n. {numero} - "
+                            f"{st.session_state.associazione.get('Denominazione', '')}"
+                        )
                         corpo = (
                             f"Gentile {intestatario},\n\n"
                             "in allegato trova la ricevuta del versamento effettuato.\n\n"
                             f"Saluti,\n{st.session_state.associazione.get('Denominazione', '')}"
                         )
                         ok, msg = invia_email_con_pdf(
-                            email_dest, oggetto, corpo, pdf_bytes, f"ricevuta_{numero}.pdf"
+                            email_dest,
+                            oggetto,
+                            corpo,
+                            pdf_bytes,
+                            f"ricevuta_{numero}.pdf",
                         )
                         if ok:
                             st.success(msg)
                         else:
                             st.error(msg)
 
-    # ==========================
-    # TAB: ELENCO RICEVUTE
-    # ==========================
+    # ===== TAB ELENCO RICEVUTE =====
     with tab_elenco:
         df = st.session_state.ricevute_emesse.copy()
         if df.empty:
@@ -615,13 +611,17 @@ def pagina_ricevute():
 
         st.dataframe(df.drop(columns=["PDF"]))
 
-        # Export Excel ricevute
-        excel_bytes = df_to_excel_bytes(df.drop(columns=["PDF"]), sheet_name="Ricevute")
+        excel_bytes = df_to_excel_bytes(
+            df.drop(columns=["PDF"]), sheet_name="Ricevute"
+        )
         st.download_button(
             label="Esporta tutte le ricevute in Excel",
             data=excel_bytes,
             file_name="ricevute_asd_ssd.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            mime=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
         )
 
         idx = st.number_input(
@@ -654,7 +654,10 @@ def pagina_ricevute():
             if not email_esistente:
                 st.error("Inserisci un indirizzo email valido.")
             else:
-                oggetto = f"Ricevuta n. {row['Numero']} - {st.session_state.associazione.get('Denominazione', '')}"
+                oggetto = (
+                    f"Ricevuta n. {row['Numero']} - "
+                    f"{st.session_state.associazione.get('Denominazione', '')}"
+                )
                 corpo = (
                     f"Gentile {row['Intestatario']},\n\n"
                     "in allegato trova la ricevuta del versamento effettuato.\n\n"
