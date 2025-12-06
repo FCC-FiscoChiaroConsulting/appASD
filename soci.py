@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 
+from drive_utils import salva_df_su_drive
+
 COLONNE_SOCI = [
     "Nome",
     "Cognome",
@@ -22,7 +24,7 @@ def pagina_soci():
     if "soci" not in st.session_state:
         st.session_state.soci = pd.DataFrame(columns=COLONNE_SOCI)
 
-    tab_nuovo, tab_elenco = st.tabs(["➕ Nuovo socio / iscritto", "📋 Elenco soci"])
+    tab_nuovo, tab_elenco = st.tabs(["Nuovo socio / iscritto", "Elenco soci"])
 
     # ==========================
     # NUOVO SOCIO
@@ -42,7 +44,7 @@ def pagina_soci():
             note = st.text_area("Note", "")
             attivo = st.checkbox("Attivo", value=True)
 
-        if st.button("💾 Salva socio"):
+        if st.button("Salva socio"):
             if not nome or not cognome:
                 st.error("Nome e cognome sono obbligatori.")
             else:
@@ -62,6 +64,16 @@ def pagina_soci():
                     [st.session_state.soci, pd.DataFrame([nuova_riga])],
                     ignore_index=True,
                 )
+
+                # Salvataggio automatico elenco soci su Google Drive
+                try:
+                    salva_df_su_drive(
+                        st.session_state.soci,
+                        "soci_asd_ssd.xlsx",
+                    )
+                except Exception:
+                    pass
+
                 st.success("Socio salvato correttamente.")
 
     # ==========================
@@ -74,3 +86,4 @@ def pagina_soci():
             return
 
         st.dataframe(df)
+
