@@ -247,7 +247,7 @@ def mostra_preview_pdf(pdf_bytes: bytes):
     <object data="data:application/pdf;base64,{b64}" type="application/pdf" width="100%" height="600px">
         <embed src="data:application/pdf;base64,{b64}" type="application/pdf" />
         <p style="font-family: sans-serif;">
-            Anteprima PDF non supportata dal browser. 
+            Anteprima PDF non supportata dal browser.
             Usa il pulsante di download qui sopra per aprire la ricevuta.
         </p>
     </object>
@@ -333,6 +333,56 @@ def pagina_ricevute():
     if not st.session_state.associazione.get("Denominazione"):
         st.warning("Compila prima l'anagrafica dell'associazione (menu a sinistra).")
 
+    # ==========================
+    # CONTROLLO SOCI
+    # ==========================
+    soci_df = st.session_state.get("soci", pd.DataFrame())
+    if soci_df is None or soci_df.empty:
+        st.error(
+            "Non ci sono soci registrati.\n\n"
+            "Per emettere una ricevuta devi prima iscrivere il socio nella pagina **Soci / Iscritti**."
+        )
+        return
+
+    # Usa solo i soci attivi se esiste la colonna 'Attivo'
+    if "Attivo" in soci_df.columns:
+        soci_df = soci_df[soci_df["Attivo"] == True]
+
+    if soci_df.empty:
+        st.error(
+            "Non ci sono soci attivi.\n\n"
+            "Per emettere una ricevuta devi avere almeno un socio attivo nella pagina **Soci / Iscritti**."
+        )
+        return
+
+    # Individua colonne CF e attività in base a come sono state chiamate
+    if "Codice fiscale" in soci_df.columns:
+        cf_col = "Codice fiscale"
+    elif "CF" in soci_df.columns:
+        cf_col = "CF"
+    else:
+        cf_col = None
+
+    if "Attività principale" in soci_df.columns:
+        attivita_col = "Attività principale"
+    else:
+        # prova a trovare una colonna che inizi con "Attività principale"
+        cand = [c for c in soci_df.columns if c.startswith("Attività principale")]
+        attivita_col = cand[0] if cand else None
+
+    # Prepariamo l'elenco dei soci per la select
+    opzioni = []
+    righe = []
+    for _, r in soci_df.iterrows():
+        nome = str(r.get("Nome", "")).strip()
+        cognome = str(r.get("Cognome", "")).strip()
+        cf_val = str(r.get(cf_col, "")).strip() if cf_col else ""
+        label = f"{nome} {cognome}".strip()
+        if cf_val:
+            label += f" (CF: {cf_val})"
+        opzioni.append(label)
+        righe.append(r)
+
     tab_nuova, tab_elenco = st.tabs(["Nuova ricevuta", "Elenco ricevute"])
 
     # ==========================
@@ -343,27 +393,21 @@ def pagina_ricevute():
         numero = st.text_input("Numero ricevuta", numero_default)
         data_r = st.date_input("Data", value=date.today())
 
-        # --- NUOVO: precompila da elenco soci ---
-        nome_default = st.session_state.get("intestatario_default", "")
-        cf_default = st.session_state.get("cf_default", "")
+        # --- SELEZIONE SOCIO OBBLIGATORIA ---
+        st.markdown("### Seleziona socio per la ricevuta")
+        idx_socio = st.selectbox(
+            "Socio (se non presente, registralo nella pagina **Soci / Iscritti**)",
+            options=list(range(len(opzioni))),
+            format_func=lambda i: opzioni[i],
+        )
+        socio_sel = righe[idx_socio]
 
-        soci_df = st.session_state.get("soci", pd.DataFrame())
-        if isinstance(soci_df, pd.DataFrame) and not soci_df.empty:
-            opzioni_soci = ["Nessuno"] + [
-                f"{row['Nome']} {row['Cognome']} ({row['CF']})"
-                for _, row in soci_df.iterrows()
-            ]
-            scelta_socio = st.selectbox("Carica dati da socio", opzioni_soci)
+        intestatario_default = f"{str(socio_sel.get('Nome', '')).strip()} {str(socio_sel.get('Cognome', '')).strip()}".strip()
+        cf_default = str(socio_sel.get(cf_col, "")).strip() if cf_col else ""
+        centro_default = str(socio_sel.get(attivita_col, "")).strip() if attivita_col else ""
+        email_default = str(socio_sel.get("Email", "")).strip() if "Email" in socio_sel.index else ""
 
-            if scelta_socio != "Nessuno":
-                idx = opzioni_soci.index(scelta_socio) - 1
-                r = soci_df.iloc[idx]
-                nome_default = f"{r['Nome']} {r['Cognome']}"
-                cf_default = r["CF"] if pd.notna(r["CF"]) else ""
-                st.session_state["intestatario_default"] = nome_default
-                st.session_state["cf_default"] = cf_default
-
-        # Modello da listino (facoltativo)
+        # Modello rapido
         nomi_listino = ["Nessun modello (compilo a mano)"] + [x["nome"] for x in LISTINO]
         modello_scelto = st.selectbox("Modello rapido (facoltativo)", nomi_listino)
 
@@ -381,24 +425,36 @@ def pagina_ricevute():
 
         col_r1, col_r2 = st.columns(2)
         with col_r1:
-            intestatario = st.text_input(
+            # Nominativo e CF derivano SEMPRE dal socio selezionato
+            st.text_input(
                 "Nominativo socio/genitore/donatore",
-                nome_default,
+                intestatario_default,
+                disabled=True,
             )
-            cf = st.text_input(
-                "Codice fiscale (facoltativo)",
-                cf_default,
-            )
+            if cf_default:
+                st.text_input(
+                    "Codice fiscale",
+                    cf_default,
+                    disabled=True,
+                )
+            else:
+                st.text_input(
+                    "Codice fiscale",
+                    "",
+                    disabled=True,
+                    placeholder="Non indicato per il socio",
+                )
 
             centro_costo = st.text_input(
                 "Attività / Centro di costo (es. Calcio U10, Ginnastica, Centro estivo)",
-                "",
+                centro_default,
             )
 
             # Causale precompilata
             if modello_scelto != "Nessun modello (compilo a mano)":
                 modello = next(x for x in LISTINO if x["nome"] == modello_scelto)
                 causale_default = modello["causale"]
+                tipo_voce = modello["tipo_voce"]
             else:
                 if tipo_voce == "Quota associativa annuale":
                     causale_default = "Quota associativa annuale stagione sportiva"
@@ -438,12 +494,15 @@ def pagina_ricevute():
 
         email_dest = st.text_input(
             "Email destinatario (per invio ricevuta, facoltativo)",
-            ""
+            email_default,
         )
 
         if st.button("Genera ricevuta e aggiorna prima nota"):
+            intestatario = intestatario_default
+            cf = cf_default
+
             if not intestatario or importo <= 0:
-                st.error("Compila almeno nominativo e importo.")
+                st.error("Verifica che il socio sia selezionato e l'importo sia maggiore di zero.")
             else:
                 dati = {
                     "Numero": numero,
@@ -589,7 +648,7 @@ def pagina_ricevute():
 
         email_esistente = st.text_input(
             "Email destinatario per questa ricevuta (facoltativo)",
-            ""
+            "",
         )
         if st.button("Invia questa ricevuta via email"):
             if not email_esistente:
