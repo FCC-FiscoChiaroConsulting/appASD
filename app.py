@@ -5,6 +5,7 @@ from prima_nota import pagina_prima_nota
 from soci import pagina_soci
 from dashboard import pagina_dashboard
 from report_backup import pagina_report_backup
+from drive_utils import carica_dati_iniziali_da_drive
 
 st.set_page_config(
     page_title="Gestionale ASD/SSD - FCC",
@@ -32,11 +33,22 @@ if "associazione" not in st.session_state:
     }
 
 # ==========================
+# CARICA DATI DA GOOGLE DRIVE (UNA SOLA VOLTA)
+# ==========================
+if "dati_caricati_da_drive" not in st.session_state:
+    try:
+        carica_dati_iniziali_da_drive()
+    except Exception:
+        # Non blocchiamo l'app se Drive non è configurato o dà errore
+        pass
+    st.session_state.dati_caricati_da_drive = True
+
+# ==========================
 # HEADER
 # ==========================
 col1, col2 = st.columns([3, 1])
 with col1:
-    st.title("Gestionale ASD/SSD – Ricevute, Prima nota, Soci, Dashboard")
+    st.title("Gestionale ASD/SSD - Ricevute, Prima nota, Soci, Dashboard")
 with col2:
     denom = st.session_state.associazione.get("Denominazione") or "Associazione non impostata"
     st.markdown(f"**{denom}**")
@@ -94,7 +106,7 @@ if menu == "Anagrafica associazione":
             a["Logo"] = logo_file.read()
             st.image(a["Logo"], caption="Anteprima logo", use_container_width=True)
 
-    if st.button("💾 Salva anagrafica"):
+    if st.button("Salva anagrafica"):
         st.session_state.associazione = a
         st.success("Anagrafica salvata correttamente.")
 
@@ -115,4 +127,3 @@ elif menu == "Dashboard":
 
 elif menu == "Report & Backup":
     pagina_report_backup()
-
