@@ -13,6 +13,8 @@ from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 import streamlit.components.v1 as components
 
+from drive_utils import salva_df_su_drive
+
 # ==========================
 # COSTANTI
 # ==========================
@@ -320,10 +322,14 @@ def pagina_ricevute():
     if "progressivo_ricevuta" not in st.session_state:
         st.session_state.progressivo_ricevuta = 1
 
-    if not st.session_state.associazione.get("Denominazione"):
-        st.warning("⚠️ Compila prima l'anagrafica dell'associazione (menù a sinistra).")
+    # Se i dati arrivano da Drive potrebbero non avere la colonna PDF
+    if "PDF" not in st.session_state.ricevute_emesse.columns:
+        st.session_state.ricevute_emesse["PDF"] = None
 
-    tab_nuova, tab_elenco = st.tabs(["➕ Nuova ricevuta", "📋 Elenco ricevute"])
+    if not st.session_state.associazione.get("Denominazione"):
+        st.warning("Compila prima l'anagrafica dell'associazione (menu a sinistra).")
+
+    tab_nuova, tab_elenco = st.tabs(["Nuova ricevuta", "Elenco ricevute"])
 
     # ==========================
     # TAB: NUOVA RICEVUTA
@@ -405,7 +411,7 @@ def pagina_ricevute():
             ""
         )
 
-        if st.button("📄 Genera ricevuta e aggiorna prima nota"):
+        if st.button("Genera ricevuta e aggiorna prima nota"):
             if not intestatario or importo <= 0:
                 st.error("Compila almeno nominativo e importo.")
             else:
@@ -464,15 +470,28 @@ def pagina_ricevute():
 
                 st.session_state.progressivo_ricevuta += 1
 
-                st.success("✅ Ricevuta generata e prima nota aggiornata.")
+                # Salvataggio automatico su Google Drive (solo dati, senza PDF)
+                try:
+                    salva_df_su_drive(
+                        st.session_state.ricevute_emesse.drop(columns=["PDF"]),
+                        "ricevute_asd_ssd.xlsx",
+                    )
+                    salva_df_su_drive(
+                        st.session_state.prima_nota,
+                        "prima_nota_asd_ssd.xlsx",
+                    )
+                except Exception:
+                    pass
+
+                st.success("Ricevuta generata e prima nota aggiornata.")
 
                 # Anteprima PDF
-                st.markdown("### Anteprima PDF")
+                st.markdown("Anteprima PDF")
                 mostra_preview_pdf(pdf_bytes)
 
                 # Download PDF
                 st.download_button(
-                    label="⬇️ Scarica PDF ricevuta",
+                    label="Scarica PDF ricevuta",
                     data=pdf_bytes,
                     file_name=f"ricevuta_{numero}.pdf",
                     mime="application/pdf",
@@ -510,7 +529,7 @@ def pagina_ricevute():
         # Export Excel ricevute
         excel_bytes = df_to_excel_bytes(df.drop(columns=["PDF"]), sheet_name="Ricevute")
         st.download_button(
-            label="⬇️ Esporta tutte le ricevute in Excel",
+            label="Esporta tutte le ricevute in Excel",
             data=excel_bytes,
             file_name="ricevute_asd_ssd.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -526,13 +545,13 @@ def pagina_ricevute():
         row = df.iloc[int(idx)]
         pdf_bytes = row["PDF"]
 
-        st.markdown(f"**Ricevuta selezionata: n. {row['Numero']} del {row['Data']}**")
+        st.markdown(f"Ricevuta selezionata: n. {row['Numero']} del {row['Data']}")
 
-        st.markdown("### Anteprima PDF")
+        st.markdown("Anteprima PDF")
         mostra_preview_pdf(pdf_bytes)
 
         st.download_button(
-            label="⬇️ Scarica PDF ricevuta selezionata",
+            label="Scarica PDF ricevuta selezionata",
             data=pdf_bytes,
             file_name=f"ricevuta_{row['Numero']}.pdf",
             mime="application/pdf",
@@ -542,7 +561,7 @@ def pagina_ricevute():
             "Email destinatario per questa ricevuta (facoltativo)",
             ""
         )
-        if st.button("📧 Invia questa ricevuta via email"):
+        if st.button("Invia questa ricevuta via email"):
             if not email_esistente:
                 st.error("Inserisci un indirizzo email valido.")
             else:
@@ -563,3 +582,4 @@ def pagina_ricevute():
                     st.success(msg)
                 else:
                     st.error(msg)
+
