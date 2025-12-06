@@ -6,11 +6,13 @@ from soci import pagina_soci
 from dashboard import pagina_dashboard
 from report_backup import pagina_report_backup
 from drive_utils import carica_dati_iniziali_da_drive
+from test_drive_page import pagina_test_drive
+
 
 st.set_page_config(
     page_title="Gestionale ASD/SSD - FCC",
     page_icon="🏟️",
-    layout="wide"
+    layout="wide",
 )
 
 # ==========================
@@ -39,7 +41,7 @@ if "dati_caricati_da_drive" not in st.session_state:
     try:
         carica_dati_iniziali_da_drive()
     except Exception:
-        # Non blocchiamo l'app se Drive non è configurato o dà errore
+        # non blocchiamo l'app se Drive non è configurato o dà errore
         pass
     st.session_state.dati_caricati_da_drive = True
 
@@ -54,7 +56,7 @@ with col2:
     st.markdown(f"**{denom}**")
 
 # ==========================
-# MENU
+# MENU LATERALE
 # ==========================
 menu = st.sidebar.radio(
     "Navigazione",
@@ -65,11 +67,12 @@ menu = st.sidebar.radio(
         "Prima nota",
         "Dashboard",
         "Report & Backup",
+        "Test Google Drive",
     ],
 )
 
 # ==========================
-# PAGINA: ANAGRAFICA
+# PAGINE
 # ==========================
 if menu == "Anagrafica associazione":
     st.subheader("Dati dell'associazione / società sportiva")
@@ -80,12 +83,14 @@ if menu == "Anagrafica associazione":
     with col_a1:
         a["Denominazione"] = st.text_input("Denominazione", a["Denominazione"])
         a["CodiceFiscale"] = st.text_input("Codice fiscale", a["CodiceFiscale"])
+
         tipo_opzioni = ["ASD", "SSD a rl", "Altro"]
         try:
             idx_tipo = tipo_opzioni.index(a.get("TipoEnte", "ASD"))
         except ValueError:
             idx_tipo = 0
         a["TipoEnte"] = st.selectbox("Tipo ente", tipo_opzioni, index=idx_tipo)
+
         a["Presidente"] = st.text_input(
             "Presidente / Legale rappresentante (uso interno)", a["Presidente"]
         )
@@ -110,9 +115,6 @@ if menu == "Anagrafica associazione":
         st.session_state.associazione = a
         st.success("Anagrafica salvata correttamente.")
 
-# ==========================
-# ALTRE PAGINE
-# ==========================
 elif menu == "Soci / Iscritti":
     pagina_soci()
 
@@ -127,3 +129,6 @@ elif menu == "Dashboard":
 
 elif menu == "Report & Backup":
     pagina_report_backup()
+
+elif menu == "Test Google Drive":
+    pagina_test_drive()
