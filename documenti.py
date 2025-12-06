@@ -1,4 +1,5 @@
-import streamlit as st
+      
+                   import streamlit as st
 import pandas as pd
 from datetime import date
 import io
@@ -69,6 +70,7 @@ LISTINO = [
         "causale": "Erogazione liberale a sostegno dell'attività istituzionale",
     },
 ]
+
 
 # ==========================
 # FUNZIONI DI SUPPORTO
@@ -562,4 +564,3 @@ def pagina_ricevute():
                     st.success(msg)
                 else:
                     st.error(msg)
-
