@@ -238,17 +238,21 @@ def pdf_to_base64(pdf_bytes: bytes) -> str:
 
 
 def mostra_preview_pdf(pdf_bytes: bytes):
-    """Mostra anteprima PDF in pagina tramite iframe."""
-    b64 = pdf_to_base64(pdf_bytes)
-    pdf_display = f"""
-        <iframe
-            src="data:application/pdf;base64,{b64}"
-            width="100%"
-            height="600px"
-            type="application/pdf">
-        </iframe>
     """
-    components.html(pdf_display, height=600)
+    Mostra anteprima PDF. Se il browser non supporta l’embed,
+    almeno compare un messaggio di fallback.
+    """
+    b64 = pdf_to_base64(pdf_bytes)
+    html = f"""
+    <object data="data:application/pdf;base64,{b64}" type="application/pdf" width="100%" height="600px">
+        <embed src="data:application/pdf;base64,{b64}" type="application/pdf" />
+        <p style="font-family: sans-serif;">
+            Anteprima PDF non supportata dal browser. 
+            Usa il pulsante di download qui sopra per aprire la ricevuta.
+        </p>
+    </object>
+    """
+    components.html(html, height=650, scrolling=False)
 
 
 def invia_email_con_pdf(
@@ -339,6 +343,26 @@ def pagina_ricevute():
         numero = st.text_input("Numero ricevuta", numero_default)
         data_r = st.date_input("Data", value=date.today())
 
+        # --- NUOVO: precompila da elenco soci ---
+        nome_default = st.session_state.get("intestatario_default", "")
+        cf_default = st.session_state.get("cf_default", "")
+
+        soci_df = st.session_state.get("soci", pd.DataFrame())
+        if isinstance(soci_df, pd.DataFrame) and not soci_df.empty:
+            opzioni_soci = ["Nessuno"] + [
+                f"{row['Nome']} {row['Cognome']} ({row['CF']})"
+                for _, row in soci_df.iterrows()
+            ]
+            scelta_socio = st.selectbox("Carica dati da socio", opzioni_soci)
+
+            if scelta_socio != "Nessuno":
+                idx = opzioni_soci.index(scelta_socio) - 1
+                r = soci_df.iloc[idx]
+                nome_default = f"{r['Nome']} {r['Cognome']}"
+                cf_default = r["CF"] if pd.notna(r["CF"]) else ""
+                st.session_state["intestatario_default"] = nome_default
+                st.session_state["cf_default"] = cf_default
+
         # Modello da listino (facoltativo)
         nomi_listino = ["Nessun modello (compilo a mano)"] + [x["nome"] for x in LISTINO]
         modello_scelto = st.selectbox("Modello rapido (facoltativo)", nomi_listino)
@@ -357,8 +381,14 @@ def pagina_ricevute():
 
         col_r1, col_r2 = st.columns(2)
         with col_r1:
-            intestatario = st.text_input("Nominativo socio/genitore/donatore", "")
-            cf = st.text_input("Codice fiscale (facoltativo)", "")
+            intestatario = st.text_input(
+                "Nominativo socio/genitore/donatore",
+                nome_default,
+            )
+            cf = st.text_input(
+                "Codice fiscale (facoltativo)",
+                cf_default,
+            )
 
             centro_costo = st.text_input(
                 "Attività / Centro di costo (es. Calcio U10, Ginnastica, Centro estivo)",
@@ -582,4 +612,3 @@ def pagina_ricevute():
                     st.success(msg)
                 else:
                     st.error(msg)
-
